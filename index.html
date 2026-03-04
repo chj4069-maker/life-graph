@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>나의 인생 그래프 — 의료인문학</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:#FAF6F1;--card:#FFFFFF;--border:#E8E0D8;
+    --text:#2C2420;--soft:#7A6E64;--accent:#C4816B;--accent-light:#F2DDD4;
+    --pos:#6B9E7A;--pos-light:#D4EDDA;--neg:#B8636E;--neg-light:#F5D5D9;
+    --serif:'Noto Serif KR',Georgia,serif;
+    --sans:-apple-system,'Apple SD Gothic Neo','Pretendard',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);font-family:var(--sans);color:var(--text);-webkit-font-smoothing:antialiased}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+  .fade-up{animation:fadeUp .5s ease-out forwards}
+  .fade-in{animation:fadeIn .5s ease-out forwards}
+  .screen{display:none}.screen.active{display:block}
+  .container{max-width:720px;margin:0 auto;padding:32px 20px}
+  .center-page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .card{background:var(--card);border-radius:14px;border:1px solid var(--border);padding:20px 24px;margin-bottom:16px}
+  h1{font-family:var(--serif);font-weight:600;line-height:1.3}
+  h2{font-family:var(--serif);font-weight:600}
+  .label{font-size:13px;font-weight:500;color:var(--soft);display:block;margin-bottom:8px}
+  .sublabel{font-size:12px;color:var(--soft);margin-bottom:6px}
+  input[type="text"],input[type="password"],input[type="number"],textarea{
+    width:100%;padding:12px 16px;font-size:15px;font-family:var(--sans);
+    border:1.5px solid var(--border);border-radius:10px;background:var(--bg);transition:border-color .2s,box-shadow .2s;
+  }
+  input:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light)}
+  textarea{font-family:var(--serif);line-height:1.6;resize:vertical}
+  input[type="range"]{width:100%;accent-color:var(--accent);height:6px}
+  .btn{display:inline-block;padding:14px 32px;font-size:15px;font-weight:500;border:none;border-radius:12px;cursor:pointer;transition:all .2s;font-family:var(--sans)}
+  .btn:active{transform:scale(.97)}
+  .btn-primary{background:var(--text);color:var(--bg)}
+  .btn-accent{background:var(--accent);color:#fff;box-shadow:0 4px 16px var(--accent-light)}
+  .btn-outline{background:transparent;color:var(--soft);border:1px solid var(--border)}
+  .btn-ghost{background:transparent;color:var(--accent);border:none;font-weight:500;padding:8px 16px}
+  .btn:disabled{background:var(--border);color:var(--soft);cursor:default;box-shadow:none}
+  .btn-block{display:block;width:100%;text-align:center}
+  .point-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;font-size:14px;margin-bottom:8px}
+  .point-row.positive{background:var(--pos-light)}.point-row.negative{background:var(--neg-light)}
+  .point-age{font-weight:600;min-width:40px}.point-score{font-weight:600;min-width:36px}
+  .point-score.pos{color:var(--pos)}.point-score.neg{color:var(--neg)}
+  .point-memo{flex:1;font-size:13px;color:var(--soft);font-family:var(--serif);font-weight:300;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .point-del{background:none;border:none;color:var(--soft);font-size:16px;padding:4px 8px;opacity:.5;cursor:pointer}
+  .student-card{background:var(--card);border-radius:14px;border:1px solid var(--border);padding:20px;cursor:pointer;transition:box-shadow .2s,transform .2s}
+  .student-card:hover{box-shadow:0 6px 24px rgba(44,36,32,.08);transform:translateY(-2px)}
+  .ai-box{background:linear-gradient(135deg,#F5EDE6,var(--bg));border:1px solid var(--border);border-radius:16px;padding:28px 28px 32px}
+  .ai-section-label{font-size:12px;font-weight:600;color:var(--accent);letter-spacing:.5px;margin-bottom:10px;text-transform:uppercase}
+  .ai-text{font-family:var(--serif);font-size:15px;font-weight:300;line-height:1.9;color:var(--text)}
+  .dots span{animation:pulse 1.4s ease-in-out infinite;display:inline-block;margin:0 3px;font-size:28px;color:var(--accent)}
+  .dots span:nth-child(2){animation-delay:.2s}.dots span:nth-child(3){animation-delay:.4s}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+  .moment-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+  .privacy-note{text-align:center;margin-top:28px;font-size:13px;color:var(--soft);font-family:var(--serif);font-weight:300;line-height:1.6}
+  .top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:12px}
+
+  /* ★ 차트 컨테이너: 강제 고정 높이 */
+  .chart-wrap,.chart-wrap-sm,.chart-wrap-lg{position:relative;width:100%;overflow:hidden}
+  .chart-wrap{height:280px!important;max-height:280px!important}
+  .chart-wrap-sm{height:140px!important;max-height:140px!important}
+  .chart-wrap-lg{height:320px!important;max-height:320px!important}
+  .chart-wrap canvas,.chart-wrap-sm canvas,.chart-wrap-lg canvas{max-height:100%!important}
+</style>
+</head>
+<body>
+
+<script>
+var FIREBASE_DB_URL = "https://life-graph-28487-default-rtdb.asia-southeast1.firebasedatabase.app";
+var INSTRUCTOR_KEY = "mh2026";
+</script>
+
+<!-- ══════════ LANDING ══════════ -->
+<div id="landing" class="screen active">
+  <div class="center-page">
+    <div class="fade-up" style="text-align:center;max-width:520px">
+      <div style="font-size:11px;letter-spacing:4px;color:var(--soft);text-transform:uppercase;margin-bottom:16px">의료인문학 · Medical Humanities</div>
+      <h1 style="font-size:36px;margin-bottom:12px">나의 인생 그래프</h1>
+      <p style="font-family:var(--serif);font-size:17px;font-weight:300;color:var(--soft);line-height:1.7;margin-bottom:48px">고통이란 무엇인가 —<br>나의 삶 속 행복과 고통의 궤적을 그려봅니다</p>
+      <div style="display:flex;flex-direction:column;gap:14px;align-items:center">
+        <button class="btn btn-primary" style="width:280px" onclick="showScreen('input')">활동 시작하기</button>
+        <button class="btn btn-outline" style="width:280px;font-size:14px" onclick="showScreen('login')">교수자 보기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ INSTRUCTOR LOGIN ══════════ -->
+<div id="login" class="screen">
+  <div class="center-page">
+    <div class="fade-up" style="text-align:center;max-width:380px">
+      <h2 style="font-size:24px;margin-bottom:8px">교수자 로그인</h2>
+      <p style="font-size:14px;color:var(--soft);margin-bottom:28px">접근 코드를 입력해주세요</p>
+      <input type="password" id="pw-input" placeholder="접근 코드" style="text-align:center;letter-spacing:4px;margin-bottom:8px" onkeydown="if(event.key==='Enter')doLogin()">
+      <p id="pw-error" style="color:var(--neg);font-size:13px;margin-bottom:8px;display:none">코드가 올바르지 않습니다</p>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn btn-outline" style="flex:1" onclick="showScreen('landing')">뒤로</button>
+        <button class="btn btn-primary" style="flex:1" onclick="doLogin()">확인</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ STUDENT INPUT ══════════ -->
+<div id="input" class="screen">
+  <div class="container" style="padding-bottom:80px">
+    <div class="fade-up" style="text-align:center;margin-bottom:32px">
+      <div style="font-size:11px;letter-spacing:4px;color:var(--soft);text-transform:uppercase;margin-bottom:12px">고통이란 무엇인가</div>
+      <h1 style="font-size:28px;margin-bottom:8px">나의 인생 그래프</h1>
+      <p style="font-size:14px;color:var(--soft);line-height:1.6">삶의 여러 시기에서 느꼈던 행복과 고통의 순간을 떠올리며<br>나의 인생 궤적을 그려보세요</p>
+    </div>
+    <div class="card fade-up">
+      <label class="label">이름 (학번)</label>
+      <input type="text" id="student-name" placeholder="예: 홍길동 (202412345)">
+    </div>
+    <div class="card fade-up">
+      <label class="label" style="margin-bottom:14px">순간 추가하기</label>
+      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <div style="flex:0 0 100px">
+          <div class="sublabel">나이 (세)</div>
+          <input type="number" id="new-age" min="0" max="100" placeholder="예: 15" onkeydown="if(event.key==='Enter')addPoint()">
+        </div>
+        <div style="flex:1;min-width:180px">
+          <div class="sublabel" style="display:flex;justify-content:space-between">
+            <span>행복 ↔ 고통</span>
+            <span id="score-display" style="font-weight:600">0</span>
+          </div>
+          <input type="range" id="new-score" min="-10" max="10" value="0" oninput="updateScoreDisplay()">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--soft);margin-top:4px">
+            <span>극심한 고통 (-10)</span><span>큰 행복 (+10)</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-bottom:14px">
+        <div class="sublabel">메모 (선택)</div>
+        <textarea id="new-memo" rows="2" placeholder="이 시기에 어떤 일이 있었나요?"></textarea>
+      </div>
+      <button class="btn btn-primary btn-block" id="add-btn" onclick="addPoint()" disabled>+ 이 순간 추가</button>
+    </div>
+    <div class="card" id="points-card" style="display:none">
+      <div class="label" id="points-count"></div>
+      <div id="points-list"></div>
+    </div>
+    <div class="card" id="preview-card" style="display:none">
+      <div class="label" style="margin-bottom:16px">그래프 미리보기</div>
+      <div class="chart-wrap"><canvas id="preview-chart"></canvas></div>
+    </div>
+    <div id="submit-area" style="text-align:center;display:none">
+      <button class="btn btn-accent btn-block" style="max-width:400px;margin:0 auto;font-size:16px;font-weight:600" id="submit-btn" onclick="doSubmit()">그래프 제출하기</button>
+      <p style="font-size:12px;color:var(--soft);margin-top:10px">제출된 결과는 본인과 교수자만 볼 수 있습니다</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ STUDENT RESULT ══════════ -->
+<div id="result" class="screen">
+  <div class="container">
+    <div class="fade-up" style="text-align:center;margin-bottom:32px">
+      <div style="width:56px;height:56px;border-radius:50%;background:var(--pos-light);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px;font-size:24px;color:var(--pos);font-weight:700">✓</div>
+      <h2 style="font-size:24px;margin-bottom:6px">제출 완료</h2>
+      <p id="result-name" style="font-size:15px;color:var(--soft)"></p>
+    </div>
+    <div class="card fade-up">
+      <h3 style="font-family:var(--serif);font-size:17px;font-weight:500;margin-bottom:20px">나의 인생 그래프</h3>
+      <div class="chart-wrap"><canvas id="result-chart"></canvas></div>
+    </div>
+    <div class="ai-box fade-up" style="margin-bottom:20px" id="ai-box">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+        <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#E8B4A0);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <span style="font-size:14px;color:#fff">✦</span>
+        </div>
+        <div>
+          <div style="font-size:15px;font-weight:600">당신의 그래프를 읽으며</div>
+          <div style="font-size:12px;color:var(--soft)">의료인문학 AI 해석</div>
+        </div>
+      </div>
+      <div id="ai-content">
+        <div style="text-align:center;padding:36px 0">
+          <div class="dots"><span>·</span><span>·</span><span>·</span></div>
+          <p style="font-size:13px;color:var(--soft);margin-top:14px">그래프를 읽고 있습니다...</p>
+        </div>
+      </div>
+    </div>
+    <div class="card fade-up" id="result-moments"></div>
+    <div class="privacy-note">이 결과는 본인과 교수자만 볼 수 있습니다.<br>다른 학생에게는 공유되지 않습니다.</div>
+  </div>
+</div>
+
+<!-- ══════════ INSTRUCTOR VIEW ══════════ -->
+<div id="instructor" class="screen">
+  <div style="max-width:960px;margin:0 auto;padding:32px 20px">
+    <div class="top-bar">
+      <div>
+        <h2 style="font-size:24px">제출 현황</h2>
+        <p id="sub-count" style="font-size:14px;color:var(--soft);margin-top:4px"></p>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" style="font-size:13px;padding:10px 20px" onclick="loadSubmissions()">새로고침</button>
+        <button class="btn btn-outline" style="font-size:13px;padding:10px 20px" onclick="showScreen('landing')">나가기</button>
+      </div>
+    </div>
+    <div id="instructor-content"></div>
+  </div>
+</div>
+
+<!-- ══════════ INSTRUCTOR DETAIL ══════════ -->
+<div id="detail" class="screen">
+  <div style="max-width:960px;margin:0 auto;padding:32px 20px">
+    <button class="btn btn-ghost" onclick="showScreen('instructor')" style="margin-bottom:16px">← 목록으로</button>
+    <div class="card" style="padding:32px" id="detail-content"></div>
+  </div>
+</div>
+
+<script>
+var dataPoints = [];
+var allSubmissions = [];
+var previewChart = null;
+var resultChart = null;
+
+function showScreen(id) {
+  var s = document.querySelectorAll('.screen');
+  for (var i = 0; i < s.length; i++) s[i].classList.remove('active');
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function updateScoreDisplay() {
+  var score = parseInt(document.getElementById('new-score').value);
+  var el = document.getElementById('score-display');
+  el.textContent = (score > 0 ? '+' : '') + score;
+  el.style.color = score > 0 ? 'var(--pos)' : score < 0 ? 'var(--neg)' : 'var(--soft)';
+}
+
+document.getElementById('new-age').addEventListener('input', function () {
+  document.getElementById('add-btn').disabled = !this.value;
+});
+
+function addPoint() {
+  var ageEl = document.getElementById('new-age');
+  var age = parseInt(ageEl.value);
+  if (isNaN(age) || age < 0 || age > 100) return;
+  var score = parseInt(document.getElementById('new-score').value);
+  var memo = document.getElementById('new-memo').value.trim();
+  dataPoints.push({ age: age, score: score, memo: memo });
+  dataPoints.sort(function (a, b) { return a.age - b.age; });
+  ageEl.value = '';
+  document.getElementById('new-score').value = 0;
+  document.getElementById('new-memo').value = '';
+  updateScoreDisplay();
+  document.getElementById('add-btn').disabled = true;
+  renderPointsList();
+  renderPreview();
+  updateSubmitVisibility();
+}
+
+function removePoint(idx) {
+  dataPoints.splice(idx, 1);
+  renderPointsList();
+  renderPreview();
+  updateSubmitVisibility();
+}
+
+function renderPointsList() {
+  var card = document.getElementById('points-card');
+  if (dataPoints.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  document.getElementById('points-count').textContent = '기록된 순간 (' + dataPoints.length + '개)';
+  var html = '';
+  for (var i = 0; i < dataPoints.length; i++) {
+    var p = dataPoints[i];
+    html += '<div class="point-row ' + (p.score >= 0 ? 'positive' : 'negative') + '">';
+    html += '<div class="point-age">' + p.age + '세</div>';
+    html += '<div class="point-score ' + (p.score >= 0 ? 'pos' : 'neg') + '">' + (p.score > 0 ? '+' : '') + p.score + '</div>';
+    html += '<div class="point-memo">' + escHtml(p.memo || '—') + '</div>';
+    html += '<button class="point-del" onclick="removePoint(' + i + ')">×</button></div>';
+  }
+  document.getElementById('points-list').innerHTML = html;
+}
+
+function updateSubmitVisibility() {
+  var name = document.getElementById('student-name').value.trim();
+  document.getElementById('submit-area').style.display = (dataPoints.length >= 2 && name) ? 'block' : 'none';
+}
+document.getElementById('student-name').addEventListener('input', updateSubmitVisibility);
+
+/* ═══ CHART CONFIG ═══ */
+function makeChartConfig(points, maxH) {
+  return {
+    type: 'line',
+    data: {
+      labels: points.map(function (p) { return p.age + '세'; }),
+      datasets: [{
+        data: points.map(function (p) { return p.score; }),
+        borderColor: '#C4816B',
+        borderWidth: 2.5,
+        pointBackgroundColor: '#FFFFFF',
+        pointBorderColor: '#C4816B',
+        pointBorderWidth: 2,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        fill: { target: { value: 0 }, above: 'rgba(107,158,122,0.12)', below: 'rgba(184,99,110,0.12)' },
+        tension: 0.3,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      resizeDelay: 0,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(255,255,255,0.97)', titleColor: '#7A6E64', bodyColor: '#2C2420',
+          borderColor: '#E8E0D8', borderWidth: 1, padding: 14, cornerRadius: 10,
+          callbacks: {
+            title: function (ctx) { return points[ctx[0].dataIndex].age + '세'; },
+            label: function (ctx) {
+              var p = points[ctx.dataIndex];
+              var s = (p.score > 0 ? '+' : '') + p.score;
+              return p.memo ? s + ' — ' + p.memo : s;
+            }
+          }
+        }
+      },
+      scales: {
+        y: { min: -10, max: 10, ticks: { stepSize: 5, color: '#7A6E64', font: { size: 12 } }, grid: { color: 'rgba(232,224,216,0.5)', drawBorder: false } },
+        x: { ticks: { color: '#7A6E64', font: { size: 12 } }, grid: { display: false } }
+      }
+    }
+  };
+}
+
+function createChart(canvasId, points, height) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  var parent = canvas.parentElement;
+  // 강제 높이 설정
+  parent.style.height = height + 'px';
+  parent.style.maxHeight = height + 'px';
+  parent.style.overflow = 'hidden';
+  parent.style.position = 'relative';
+  canvas.style.maxHeight = height + 'px';
+  return new Chart(canvas.getContext('2d'), makeChartConfig(points, height));
+}
+
+function renderPreview() {
+  var card = document.getElementById('preview-card');
+  if (dataPoints.length < 2) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  if (previewChart) previewChart.destroy();
+  previewChart = createChart('preview-chart', dataPoints, 280);
+}
+
+/* ═══ SUBMIT ═══ */
+async function doSubmit() {
+  var name = document.getElementById('student-name').value.trim();
+  if (!name || dataPoints.length < 2) return;
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = '제출 중...';
+
+  var submission = { name: name, data: dataPoints.slice(), submittedAt: new Date().toISOString() };
+
+  // Firebase save
+  var fbKey = null;
+  try {
+    var res = await fetch(FIREBASE_DB_URL + '/submissions.json', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(submission)
+    });
+    var d = await res.json();
+    fbKey = d.name;
+  } catch (e) { console.warn('Firebase:', e); }
+
+  // Show result
+  showScreen('result');
+  document.getElementById('result-name').textContent = name + '님의 인생 그래프가 제출되었습니다';
+
+  if (resultChart) resultChart.destroy();
+  resultChart = createChart('result-chart', dataPoints, 280);
+
+  // Moments
+  var mh = '<div class="label" style="margin-bottom:12px">기록된 순간들</div>';
+  for (var i = 0; i < dataPoints.length; i++) {
+    var p = dataPoints[i];
+    mh += '<div class="point-row ' + (p.score >= 0 ? 'positive' : 'negative') + '">';
+    mh += '<div class="point-age">' + p.age + '세</div>';
+    mh += '<div class="point-score ' + (p.score >= 0 ? 'pos' : 'neg') + '">' + (p.score > 0 ? '+' : '') + p.score + '</div>';
+    mh += '<div class="point-memo">' + escHtml(p.memo || '—') + '</div></div>';
+  }
+  document.getElementById('result-moments').innerHTML = mh;
+
+  // AI interpretation
+  document.getElementById('ai-content').innerHTML = '<div style="text-align:center;padding:36px 0"><div class="dots"><span>·</span><span>·</span><span>·</span></div><p style="font-size:13px;color:var(--soft);margin-top:14px">그래프를 읽고 있습니다...</p></div>';
+
+  try {
+    var aiRes = await fetch('/.netlify/functions/interpret', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, dataPoints: dataPoints })
+    });
+    var aiText = await aiRes.text();
+    var aiData;
+    try { aiData = JSON.parse(aiText); } catch (e) { throw new Error('응답 파싱 실패: ' + aiText.substring(0, 100)); }
+
+    if (!aiRes.ok) {
+      throw new Error('서버 오류 (' + aiRes.status + '): ' + (aiData.error || aiText.substring(0, 100)));
+    }
+
+    if (aiData.interpretation) {
+      renderAI(aiData.interpretation);
+      if (fbKey) {
+        submission.aiInterpretation = aiData.interpretation;
+        fetch(FIREBASE_DB_URL + '/submissions/' + fbKey + '.json', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(submission)
+        }).catch(function () { });
+      }
+    } else {
+      throw new Error('해석 텍스트 없음');
+    }
+  } catch (e) {
+    console.error('AI error:', e);
+    document.getElementById('ai-content').innerHTML =
+      '<p class="ai-text" style="color:var(--soft)">AI 해석을 불러오지 못했습니다.<br><span style="font-size:12px;color:var(--neg)">' + escHtml(e.message) + '</span><br><br>하지만 당신이 그린 이 그래프 자체가 이미 의미 있는 성찰입니다.</p>';
+  }
+}
+
+function renderAI(text) {
+  var graph = '', advice = '';
+  var gm = text.match(/\[그래프 해석\]\s*([\s\S]*?)(?=\[철학적 조언\]|$)/);
+  var am = text.match(/\[철학적 조언\]\s*([\s\S]*?)$/);
+  if (gm) graph = gm[1].trim();
+  if (am) advice = am[1].trim();
+  if (!graph && !advice) advice = text.trim();
+
+  var html = '<div class="fade-in">';
+  if (graph) html += '<div style="margin-bottom:22px"><div class="ai-section-label">그래프 해석</div><p class="ai-text">' + escHtml(graph) + '</p></div>';
+  if (advice) html += '<div style="' + (graph ? 'border-top:1px solid var(--border);padding-top:22px' : '') + '"><div class="ai-section-label">철학적 조언</div><p class="ai-text">' + escHtml(advice) + '</p></div>';
+  html += '</div>';
+  document.getElementById('ai-content').innerHTML = html;
+}
+
+function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+/* ═══ INSTRUCTOR ═══ */
+function doLogin() {
+  if (document.getElementById('pw-input').value === INSTRUCTOR_KEY) {
+    document.getElementById('pw-error').style.display = 'none';
+    showScreen('instructor');
+    loadSubmissions();
+  } else document.getElementById('pw-error').style.display = 'block';
+}
+
+async function loadSubmissions() {
+  document.getElementById('instructor-content').innerHTML = '<div style="text-align:center;padding:60px;color:var(--soft)">불러오는 중...</div>';
+  try {
+    var res = await fetch(FIREBASE_DB_URL + '/submissions.json');
+    var data = await res.json();
+    if (!data) allSubmissions = [];
+    else {
+      allSubmissions = Object.keys(data).map(function (k) { var s = data[k]; s._key = k; return s; })
+        .sort(function (a, b) { return new Date(b.submittedAt) - new Date(a.submittedAt); });
+    }
+  } catch (e) { allSubmissions = []; }
+  document.getElementById('sub-count').textContent = '총 ' + allSubmissions.length + '명 제출';
+  renderSubmissionGrid();
+}
+
+function renderSubmissionGrid() {
+  if (allSubmissions.length === 0) {
+    document.getElementById('instructor-content').innerHTML = '<div style="text-align:center;padding:60px;color:var(--soft);background:var(--card);border-radius:16px;border:1px solid var(--border)">아직 제출된 그래프가 없습니다</div>';
+    return;
+  }
+  var html = '<div class="grid">';
+  for (var i = 0; i < allSubmissions.length; i++) {
+    var sub = allSubmissions[i];
+    var dt = new Date(sub.submittedAt);
+    var ts = (dt.getMonth() + 1) + '월 ' + dt.getDate() + '일 ' + String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
+    html += '<div class="student-card" onclick="showDetail(' + i + ')">';
+    html += '<div style="font-family:var(--serif);font-size:17px;font-weight:600;margin-bottom:4px">' + escHtml(sub.name) + '</div>';
+    html += '<div style="font-size:12px;color:var(--soft);margin-bottom:12px">' + sub.data.length + '개 지점 · ' + ts + '</div>';
+    html += '<div class="chart-wrap-sm"><canvas id="mini-' + i + '"></canvas></div></div>';
+  }
+  html += '</div>';
+  document.getElementById('instructor-content').innerHTML = html;
+  setTimeout(function () {
+    for (var j = 0; j < allSubmissions.length; j++) {
+      var c = document.getElementById('mini-' + j);
+      if (c) {
+        var cfg = makeChartConfig(allSubmissions[j].data);
+        cfg.options.plugins.tooltip = { enabled: false };
+        cfg.options.scales.x.ticks = { display: false };
+        cfg.options.scales.y.ticks = { display: false };
+        cfg.options.scales.y.grid = { display: false };
+        c.parentElement.style.height = '140px';
+        c.parentElement.style.maxHeight = '140px';
+        c.parentElement.style.overflow = 'hidden';
+        c.parentElement.style.position = 'relative';
+        c.style.maxHeight = '140px';
+        new Chart(c.getContext('2d'), cfg);
+      }
+    }
+  }, 100);
+}
+
+function showDetail(idx) {
+  var sub = allSubmissions[idx];
+  showScreen('detail');
+  var html = '<h3 style="font-family:var(--serif);font-size:20px;font-weight:600;margin-bottom:4px">' + escHtml(sub.name) + '</h3>';
+  html += '<p style="font-size:13px;color:var(--soft);margin-bottom:24px">' + new Date(sub.submittedAt).toLocaleString('ko-KR') + '</p>';
+  html += '<div class="chart-wrap-lg"><canvas id="detail-chart"></canvas></div>';
+
+  if (sub.aiInterpretation) {
+    var g = '', a = '';
+    var gm = sub.aiInterpretation.match(/\[그래프 해석\]\s*([\s\S]*?)(?=\[철학적 조언\]|$)/);
+    var am = sub.aiInterpretation.match(/\[철학적 조언\]\s*([\s\S]*?)$/);
+    if (gm) g = gm[1].trim(); if (am) a = am[1].trim();
+    html += '<div style="margin-top:28px;padding:24px 28px;background:linear-gradient(135deg,var(--bg),#F5EDE6);border-radius:14px;border:1px solid var(--border)">';
+    html += '<div style="font-size:12px;font-weight:600;color:var(--accent);letter-spacing:1px;text-transform:uppercase;margin-bottom:16px">AI 해석</div>';
+    if (g) html += '<div style="margin-bottom:18px"><div style="font-size:13px;font-weight:600;color:var(--soft);margin-bottom:6px">그래프 해석</div><p class="ai-text">' + escHtml(g) + '</p></div>';
+    if (a) html += '<div><div style="font-size:13px;font-weight:600;color:var(--soft);margin-bottom:6px">철학적 조언</div><p class="ai-text">' + escHtml(a) + '</p></div>';
+    html += '</div>';
+  }
+
+  html += '<div style="margin-top:24px"><h4 style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--soft)">기록된 순간들</h4><div class="moment-grid">';
+  for (var i = 0; i < sub.data.length; i++) {
+    var p = sub.data[i];
+    html += '<div style="padding:12px 16px;border-radius:10px;background:' + (p.score >= 0 ? 'var(--pos-light)' : 'var(--neg-light)') + ';font-size:13px">';
+    html += '<div style="font-weight:600;margin-bottom:2px">' + p.age + '세 · ' + (p.score > 0 ? '+' : '') + p.score + '</div>';
+    if (p.memo) html += '<div style="color:var(--soft);font-family:var(--serif);font-weight:300;line-height:1.5">' + escHtml(p.memo) + '</div>';
+    html += '</div>';
+  }
+  html += '</div></div>';
+  document.getElementById('detail-content').innerHTML = html;
+  setTimeout(function () {
+    var c = document.getElementById('detail-chart');
+    if (c) createChart('detail-chart', sub.data, 320);
+  }, 100);
+}
+</script>
+</body>
+</html>
