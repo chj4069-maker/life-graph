@@ -465,82 +465,85 @@ function renderAI(text) {
 
 /* ═══ PDF DOWNLOAD ═══ */
 async function downloadPDF(source) {
-  var container;
-  var filename;
+  var container, filename, btn;
 
   if (source === 'result') {
     container = document.getElementById('result').querySelector('.container');
     filename = (document.getElementById('student-name').value.trim() || 'life-graph') + '_인생그래프.pdf';
-    var btn = document.getElementById('pdf-btn-result');
+    btn = document.getElementById('pdf-btn-result');
   } else {
     container = document.getElementById('detail-content');
     var nameEl = container.querySelector('h3');
     filename = (nameEl ? nameEl.textContent.trim() : 'student') + '_인생그래프.pdf';
-    var btn = document.getElementById('pdf-btn-detail');
+    btn = document.getElementById('pdf-btn-detail');
   }
 
   if (btn) { btn.disabled = true; btn.textContent = 'PDF 생성 중...'; }
 
+  // 모든 자식 요소의 원래 스타일 저장 & PDF용으로 교체
+  var allEls = container.querySelectorAll('*');
+  var savedStyles = [];
+  for (var i = 0; i < allEls.length; i++) {
+    var el = allEls[i];
+    savedStyles.push(el.style.cssText);
+
+    // opacity 강제 1
+    var computed = window.getComputedStyle(el);
+    if (parseFloat(computed.opacity) < 1) el.style.opacity = '1';
+
+    // 그라데이션 배경 -> 단색
+    var bg = computed.backgroundImage;
+    if (bg && bg.indexOf('gradient') !== -1) {
+      el.style.background = '#F0E8E0';
+    }
+
+    // 애니메이션 제거 (캡처 시 중간 상태 방지)
+    el.style.animation = 'none';
+  }
+
   try {
-    // PDF 캡처 전: 그라데이션/투명 배경을 불투명 단색으로 교체
-    var aiBox = container.querySelectorAll('.ai-box, [style*="linear-gradient"]');
-    var origStyles = [];
-    for (var k = 0; k < aiBox.length; k++) {
-      origStyles.push(aiBox[k].getAttribute('style') || '');
-      aiBox[k].style.background = '#F0E8E0';
-    }
-
-    // 모든 fade-up 요소의 opacity를 1로 강제
-    var fadeEls = container.querySelectorAll('.fade-up, .fade-in');
-    for (var f = 0; f < fadeEls.length; f++) {
-      fadeEls[f].style.opacity = '1';
-    }
-
     var canvas = await html2canvas(container, {
-      scale: 2,
+      scale: 3,
       useCORS: true,
       backgroundColor: '#FAF6F1',
       logging: false,
       width: container.scrollWidth,
       height: container.scrollHeight,
-      windowWidth: 800,
     });
-
-    // 스타일 복원
-    for (var k2 = 0; k2 < aiBox.length; k2++) {
-      aiBox[k2].setAttribute('style', origStyles[k2]);
-    }
 
     var imgData = canvas.toDataURL('image/png');
 
     var JsPDF = (window.jspdf && window.jspdf.jsPDF) || (window.jsPDF) || null;
-    if (!JsPDF) {
-      throw new Error('PDF 라이브러리가 로드되지 않았습니다. 페이지를 새로고침 후 다시 시도해주세요.');
-    }
+    if (!JsPDF) throw new Error('PDF 라이브러리 로드 실패. 새로고침 후 다시 시도해주세요.');
+
     var pdf = new JsPDF('p', 'mm', 'a4');
-    var pdfWidth = pdf.internal.pageSize.getWidth();
-    var pdfHeight = pdf.internal.pageSize.getHeight();
-    var margin = 10;
-    var imgWidth = pdfWidth - margin * 2;
-    var imgHeight = (canvas.height * imgWidth) / canvas.width;
+    var pw = pdf.internal.pageSize.getWidth();
+    var ph = pdf.internal.pageSize.getHeight();
+    var m = 8;
+    var iw = pw - m * 2;
+    var ih = (canvas.height * iw) / canvas.width;
+    var left = ih;
+    var y = m;
 
-    var yPos = margin;
-    var heightLeft = imgHeight;
+    pdf.addImage(imgData, 'PNG', m, y, iw, ih);
+    left -= (ph - m * 2);
 
-    pdf.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
-    heightLeft -= (pdfHeight - margin * 2);
-
-    while (heightLeft > 0) {
+    while (left > 0) {
       pdf.addPage();
-      yPos = margin - (imgHeight - heightLeft);
-      pdf.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
-      heightLeft -= (pdfHeight - margin * 2);
+      y = m - (ih - left);
+      pdf.addImage(imgData, 'PNG', m, y, iw, ih);
+      left -= (ph - m * 2);
     }
 
     pdf.save(filename);
   } catch (e) {
     console.error('PDF error:', e);
-    alert('PDF 생성에 실패했습니다: ' + e.message);
+    alert('PDF 생성 실패: ' + e.message);
+  }
+
+  // 원래 스타일 복원
+  for (var j = 0; j < allEls.length; j++) {
+    allEls[j].style.cssText = savedStyles[j];
   }
 
   if (btn) { btn.disabled = false; btn.textContent = source === 'result' ? 'PDF로 저장하기' : 'PDF로 저장'; }
