@@ -407,32 +407,34 @@ async function doSubmit() {
   document.getElementById('ai-content').innerHTML = '<div style="text-align:center;padding:36px 0"><div class="dots"><span>·</span><span>·</span><span>·</span></div><p style="font-size:13px;color:var(--soft);margin-top:14px">그래프를 읽고 있습니다...</p></div>';
 
   if (fbKey) {
-    // 1. 백그라운드 함수 호출 (즉시 202 반환, AI는 백그라운드에서 처리)
+    // 프롬프트를 브라우저에서 조립 (한글이 HTML 안에 있으므로 인코딩 안 깨짐)
+    var prompt = buildPrompt(name, dataPoints);
+
+    // 1. 백그라운드 함수 호출
     fetch('/.netlify/functions/interpret-background', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, dataPoints: dataPoints, firebaseUrl: FIREBASE_DB_URL, fbKey: fbKey })
+      body: JSON.stringify({ prompt: prompt, firebaseUrl: FIREBASE_DB_URL, fbKey: fbKey })
     }).catch(function(e) { console.warn('Background trigger:', e); });
 
-    // 2. Firebase 폴링 — AI 결과가 저장될 때까지 2초마다 확인
+    // 2. Firebase 폴링 — 2초마다 확인
     var pollCount = 0;
-    var maxPolls = 30; // 최대 60초
+    var maxPolls = 30;
     var pollTimer = setInterval(async function() {
       pollCount++;
       try {
         var checkRes = await fetch(FIREBASE_DB_URL + '/submissions/' + fbKey + '/aiInterpretation.json');
         var checkData = await checkRes.json();
-        if (checkData && checkData !== 'null') {
+        if (checkData && checkData !== 'null' && typeof checkData === 'string') {
           clearInterval(pollTimer);
           renderAI(checkData);
           return;
         }
-        // 에러 체크
         var errRes = await fetch(FIREBASE_DB_URL + '/submissions/' + fbKey + '/aiError.json');
         var errData = await errRes.json();
         if (errData && errData !== 'null') {
           clearInterval(pollTimer);
           document.getElementById('ai-content').innerHTML =
-            '<p class="ai-text" style="color:var(--soft)">AI 해석을 불러오지 못했습니다.<br><span style="font-size:12px;color:var(--neg)">' + escHtml(errData) + '</span><br><br>하지만 당신이 그린 이 그래프 자체가 이미 의미 있는 성찰입니다.</p>';
+            '<p class="ai-text" style="color:var(--soft)">AI 해석을 불러오지 못했습니다.<br><span style="font-size:12px;color:var(--neg)">' + escHtml(String(errData)) + '</span><br><br>하지만 당신이 그린 이 그래프 자체가 이미 의미 있는 성찰입니다.</p>';
           return;
         }
       } catch(e) { console.warn('Poll error:', e); }
@@ -561,6 +563,42 @@ async function downloadPDF(source) {
 }
 
 function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+/* ═══ PROMPT BUILDER (한글은 여기에만) ═══ */
+function buildPrompt(name, dp) {
+  var summary = dp.map(function(p) {
+    return p.age + '세: ' + (p.score > 0 ? '+' : '') + p.score + (p.memo ? ' (' + p.memo + ')' : '');
+  }).join('\n');
+
+  var scores = dp.map(function(p) { return p.score; });
+  var minS = Math.min.apply(null, scores);
+  var maxS = Math.max.apply(null, scores);
+  var minI = scores.indexOf(minS);
+  var maxI = scores.indexOf(maxS);
+
+  var p = '';
+  p += '의료인문학 강의(\'고통이란 무엇인가\')에서 의대생의 인생 그래프를 해석하세요.\n\n';
+  p += '학생: ' + name + '\n데이터(-10=극심한 고통, +10=큰 행복):\n' + summary + '\n';
+  p += '최저: ' + dp[minI].age + '세 ' + minS + '점, 최고: ' + dp[maxI].age + '세 ' + maxS + '점\n\n';
+
+  p += '핵심원칙: 개별성이 가장 중요합니다. 학생이 적은 구체적 순간들(나이, 점수, 메모)을 직접 언급하고, 순간들 사이의 관계와 흐름을 읽으세요. \'나를 정확히 읽어냈다\'고 느끼게.\n\n';
+
+  p += '[그래프 해석] (1문단, 5~7문장)\n';
+  p += '궤적의 형상(V자형/U자형/롤러코스터 등)을 명명하고, 메모가 있는 순간을 구체적으로 언급하세요. 극단적 점수(-7이하)는 무게를 두어 다루세요. 마지막 지점이 \'지금\'에 대해 말하는 것을 짚으세요.\n\n';
+
+  p += '[철학적 조언] (3문단)\n\n';
+
+  p += '1문단 - 순간들의 대화(5~6문장): 기록된 순간들을 비교/연결하세요. 행복과 고통의 관계. 극단적 순간에 진정성 있게 공감. 철학자 한 명의 개념을 렌즈로 1~2문장만 빌려오세요(이론설명X, 경험에 비추는 용도만).\n';
+  p += '철학자 풀(하나만): Nietzsche(운명애), Schopenhauer(고통의 본질), Canguilhem(새 규범창조), Frank(서사유형), Frankl(의미발견), Carel(건강현상학), Levinas(타자의고통), Merleau-Ponty(체화경험), Heidegger(실존각성), Kierkegaard(절망과 도약), Simone Weil(주의력), Arendt(새 시작), Ricoeur(서사정체성), Butler(취약성), Deleuze(되기), Camus(부조리), 스토아학파, 불교(고와 무상). 매번 다른 철학자 선택.\n\n';
+
+  p += '2문단 - 고통 이후의 변화(4~5문장): 고통 이후 그래프에서 실제로 무엇이 달라졌는지(또는 안 달라졌는지). 추상적 \'고통에 의미가 있다\' 금지. 이 학생 그래프에서 보이는 것만.\n\n';
+
+  p += '3문단 - 의료인으로서(4~5문장): \'환자에게 공감하세요\' 같은 교과서적 말 금지. 이 학생의 구체적 경험과 의료 상황을 연결. 마지막에 이 학생에게만 건네는 진부하지 않은 한마디.\n\n';
+
+  p += '톤: 진단/상담 금지. \'~했군요\' 금지. 선배가 조용히 건네는 말. 이름 부르지 마세요. 한국어. 총 4문단, 700~1000자.';
+
+  return p;
+}
 
 /* ═══ INSTRUCTOR ═══ */
 function doLogin() {
