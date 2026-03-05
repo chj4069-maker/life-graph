@@ -132,7 +132,7 @@ var INSTRUCTOR_KEY = "mh2026";
         </div>
         <div style="flex:1;min-width:180px">
           <div class="sublabel" style="display:flex;justify-content:space-between">
-            <span>행복 ↔ 고통</span>
+            <span>&nbsp;</span>
             <span id="score-display" style="font-weight:600">0</span>
           </div>
           <input type="range" id="new-score" min="-10" max="10" value="0" oninput="updateScoreDisplay()">
@@ -249,13 +249,23 @@ document.getElementById('new-age').addEventListener('input', function () {
   document.getElementById('add-btn').disabled = !this.value;
 });
 
+var editingIndex = -1;
+
 function addPoint() {
   var ageEl = document.getElementById('new-age');
   var age = parseInt(ageEl.value);
   if (isNaN(age) || age < 0 || age > 100) return;
   var score = parseInt(document.getElementById('new-score').value);
   var memo = document.getElementById('new-memo').value.trim();
-  dataPoints.push({ age: age, score: score, memo: memo });
+
+  if (editingIndex >= 0) {
+    dataPoints[editingIndex] = { age: age, score: score, memo: memo };
+    editingIndex = -1;
+    document.getElementById('add-btn').textContent = '+ 이 순간 추가';
+  } else {
+    dataPoints.push({ age: age, score: score, memo: memo });
+  }
+
   dataPoints.sort(function (a, b) { return a.age - b.age; });
   ageEl.value = '';
   document.getElementById('new-score').value = 0;
@@ -267,7 +277,31 @@ function addPoint() {
   updateSubmitVisibility();
 }
 
+function editPoint(idx) {
+  var p = dataPoints[idx];
+  document.getElementById('new-age').value = p.age;
+  document.getElementById('new-score').value = p.score;
+  document.getElementById('new-memo').value = p.memo || '';
+  updateScoreDisplay();
+  editingIndex = idx;
+  document.getElementById('add-btn').disabled = false;
+  document.getElementById('add-btn').textContent = '✓ 수정 완료';
+  document.getElementById('new-age').focus();
+}
+
+function cancelEdit() {
+  editingIndex = -1;
+  document.getElementById('new-age').value = '';
+  document.getElementById('new-score').value = 0;
+  document.getElementById('new-memo').value = '';
+  updateScoreDisplay();
+  document.getElementById('add-btn').disabled = true;
+  document.getElementById('add-btn').textContent = '+ 이 순간 추가';
+}
+
 function removePoint(idx) {
+  if (editingIndex === idx) cancelEdit();
+  else if (editingIndex > idx) editingIndex--;
   dataPoints.splice(idx, 1);
   renderPointsList();
   renderPreview();
@@ -282,10 +316,12 @@ function renderPointsList() {
   var html = '';
   for (var i = 0; i < dataPoints.length; i++) {
     var p = dataPoints[i];
-    html += '<div class="point-row ' + (p.score >= 0 ? 'positive' : 'negative') + '">';
+    var isEditing = (i === editingIndex);
+    html += '<div class="point-row ' + (p.score >= 0 ? 'positive' : 'negative') + '" style="' + (isEditing ? 'outline:2px solid var(--accent);' : '') + '">';
     html += '<div class="point-age">' + p.age + '세</div>';
     html += '<div class="point-score ' + (p.score >= 0 ? 'pos' : 'neg') + '">' + (p.score > 0 ? '+' : '') + p.score + '</div>';
     html += '<div class="point-memo">' + escHtml(p.memo || '—') + '</div>';
+    html += '<button class="point-del" onclick="editPoint(' + i + ')" style="opacity:.7;font-size:13px">✎</button>';
     html += '<button class="point-del" onclick="removePoint(' + i + ')">×</button></div>';
   }
   document.getElementById('points-list').innerHTML = html;
