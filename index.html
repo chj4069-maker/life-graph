@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
   :root {
     --bg:#FAF6F1;--card:#FFFFFF;--border:#E8E0D8;
@@ -497,21 +497,29 @@ async function downloadPDF(source) {
     container.style.overflow = origOverflow;
 
     var imgData = canvas.toDataURL('image/jpeg', 0.95);
-    var pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+
+    // jsPDF 접근 - 여러 경로 시도
+    var JsPDF = (window.jspdf && window.jspdf.jsPDF) || (window.jsPDF) || null;
+    if (!JsPDF) {
+      throw new Error('PDF 라이브러리가 로드되지 않았습니다. 페이지를 새로고침 후 다시 시도해주세요.');
+    }
+    var pdf = new JsPDF('p', 'mm', 'a4');
     var pdfWidth = pdf.internal.pageSize.getWidth();
     var pdfHeight = pdf.internal.pageSize.getHeight();
-    var imgWidth = pdfWidth - 20; // 10mm margins
+    var imgWidth = pdfWidth - 20;
     var imgHeight = (canvas.height * imgWidth) / canvas.width;
 
+    var position = 10;
     var heightLeft = imgHeight;
-    var position = 10; // top margin
 
+    // 첫 페이지
     pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
     heightLeft -= (pdfHeight - 20);
 
+    // 추가 페이지
     while (heightLeft > 0) {
-      position = -(pdfHeight - 20) + 10 - (imgHeight - heightLeft - (pdfHeight - 20));
       pdf.addPage();
+      position = 10 - (imgHeight - heightLeft);
       pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
       heightLeft -= (pdfHeight - 20);
     }
