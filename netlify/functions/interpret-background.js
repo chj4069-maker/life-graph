@@ -19,9 +19,10 @@ function callAnthropic(apiKey, prompt) {
       },
     };
     var req = https.request(options, function (res) {
-      var data = "";
-      res.on("data", function (chunk) { data += chunk; });
+      var chunks = [];
+      res.on("data", function (chunk) { chunks.push(chunk); });
       res.on("end", function () {
+        var data = Buffer.concat(chunks).toString("utf8");
         try {
           var parsed = JSON.parse(data);
           if (res.statusCode !== 200) reject(new Error("API " + res.statusCode));
@@ -46,9 +47,9 @@ function firebasePut(url, data) {
       headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
     };
     var req = https.request(options, function (res) {
-      var d = "";
-      res.on("data", function (chunk) { d += chunk; });
-      res.on("end", function () { resolve(d); });
+      var chunks = [];
+      res.on("data", function (chunk) { chunks.push(chunk); });
+      res.on("end", function () { resolve(Buffer.concat(chunks).toString("utf8")); });
     });
     req.on("error", function (e) { reject(e); });
     req.write(body);
