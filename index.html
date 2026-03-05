@@ -403,38 +403,49 @@ async function doSubmit() {
   }
   document.getElementById('result-moments').innerHTML = mh;
 
-  // AI interpretation
+  // AI interpretation via background function + Firebase polling
   document.getElementById('ai-content').innerHTML = '<div style="text-align:center;padding:36px 0"><div class="dots"><span>·</span><span>·</span><span>·</span></div><p style="font-size:13px;color:var(--soft);margin-top:14px">그래프를 읽고 있습니다...</p></div>';
 
-  try {
-    var aiRes = await fetch('/.netlify/functions/interpret', {
+  if (fbKey) {
+    // 1. 백그라운드 함수 호출 (즉시 202 반환, AI는 백그라운드에서 처리)
+    fetch('/.netlify/functions/interpret-background', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, dataPoints: dataPoints })
-    });
-    var aiText = await aiRes.text();
-    var aiData;
-    try { aiData = JSON.parse(aiText); } catch (e) { throw new Error('응답 파싱 실패: ' + aiText.substring(0, 100)); }
+      body: JSON.stringify({ name: name, dataPoints: dataPoints, firebaseUrl: FIREBASE_DB_URL, fbKey: fbKey })
+    }).catch(function(e) { console.warn('Background trigger:', e); });
 
-    if (!aiRes.ok) {
-      throw new Error('서버 오류 (' + aiRes.status + '): ' + (aiData.error || aiText.substring(0, 100)));
-    }
+    // 2. Firebase 폴링 — AI 결과가 저장될 때까지 2초마다 확인
+    var pollCount = 0;
+    var maxPolls = 30; // 최대 60초
+    var pollTimer = setInterval(async function() {
+      pollCount++;
+      try {
+        var checkRes = await fetch(FIREBASE_DB_URL + '/submissions/' + fbKey + '/aiInterpretation.json');
+        var checkData = await checkRes.json();
+        if (checkData && checkData !== 'null') {
+          clearInterval(pollTimer);
+          renderAI(checkData);
+          return;
+        }
+        // 에러 체크
+        var errRes = await fetch(FIREBASE_DB_URL + '/submissions/' + fbKey + '/aiError.json');
+        var errData = await errRes.json();
+        if (errData && errData !== 'null') {
+          clearInterval(pollTimer);
+          document.getElementById('ai-content').innerHTML =
+            '<p class="ai-text" style="color:var(--soft)">AI 해석을 불러오지 못했습니다.<br><span style="font-size:12px;color:var(--neg)">' + escHtml(errData) + '</span><br><br>하지만 당신이 그린 이 그래프 자체가 이미 의미 있는 성찰입니다.</p>';
+          return;
+        }
+      } catch(e) { console.warn('Poll error:', e); }
 
-    if (aiData.interpretation) {
-      renderAI(aiData.interpretation);
-      if (fbKey) {
-        submission.aiInterpretation = aiData.interpretation;
-        fetch(FIREBASE_DB_URL + '/submissions/' + fbKey + '.json', {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(submission)
-        }).catch(function () { });
+      if (pollCount >= maxPolls) {
+        clearInterval(pollTimer);
+        document.getElementById('ai-content').innerHTML =
+          '<p class="ai-text" style="color:var(--soft)">AI 해석에 시간이 오래 걸리고 있습니다. 잠시 후 페이지를 새로고침하면 결과를 확인할 수 있습니다.</p>';
       }
-    } else {
-      throw new Error('해석 텍스트 없음');
-    }
-  } catch (e) {
-    console.error('AI error:', e);
+    }, 2000);
+  } else {
     document.getElementById('ai-content').innerHTML =
-      '<p class="ai-text" style="color:var(--soft)">AI 해석을 불러오지 못했습니다.<br><span style="font-size:12px;color:var(--neg)">' + escHtml(e.message) + '</span><br><br>하지만 당신이 그린 이 그래프 자체가 이미 의미 있는 성찰입니다.</p>';
+      '<p class="ai-text" style="color:var(--soft)">데이터 저장에 실패하여 AI 해석을 요청할 수 없습니다.</p>';
   }
 }
 
