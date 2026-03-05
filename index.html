@@ -482,23 +482,37 @@ async function downloadPDF(source) {
   if (btn) { btn.disabled = true; btn.textContent = 'PDF 생성 중...'; }
 
   try {
-    // 임시로 스크롤 영역을 확보하기 위해 스타일 조정
-    var origOverflow = container.style.overflow;
-    container.style.overflow = 'visible';
+    // PDF 캡처 전: 그라데이션/투명 배경을 불투명 단색으로 교체
+    var aiBox = container.querySelectorAll('.ai-box, [style*="linear-gradient"]');
+    var origStyles = [];
+    for (var k = 0; k < aiBox.length; k++) {
+      origStyles.push(aiBox[k].getAttribute('style') || '');
+      aiBox[k].style.background = '#F0E8E0';
+    }
+
+    // 모든 fade-up 요소의 opacity를 1로 강제
+    var fadeEls = container.querySelectorAll('.fade-up, .fade-in');
+    for (var f = 0; f < fadeEls.length; f++) {
+      fadeEls[f].style.opacity = '1';
+    }
 
     var canvas = await html2canvas(container, {
       scale: 2,
       useCORS: true,
       backgroundColor: '#FAF6F1',
       logging: false,
-      windowWidth: 720,
+      width: container.scrollWidth,
+      height: container.scrollHeight,
+      windowWidth: 800,
     });
 
-    container.style.overflow = origOverflow;
+    // 스타일 복원
+    for (var k2 = 0; k2 < aiBox.length; k2++) {
+      aiBox[k2].setAttribute('style', origStyles[k2]);
+    }
 
-    var imgData = canvas.toDataURL('image/jpeg', 0.95);
+    var imgData = canvas.toDataURL('image/png');
 
-    // jsPDF 접근 - 여러 경로 시도
     var JsPDF = (window.jspdf && window.jspdf.jsPDF) || (window.jsPDF) || null;
     if (!JsPDF) {
       throw new Error('PDF 라이브러리가 로드되지 않았습니다. 페이지를 새로고침 후 다시 시도해주세요.');
@@ -506,22 +520,21 @@ async function downloadPDF(source) {
     var pdf = new JsPDF('p', 'mm', 'a4');
     var pdfWidth = pdf.internal.pageSize.getWidth();
     var pdfHeight = pdf.internal.pageSize.getHeight();
-    var imgWidth = pdfWidth - 20;
+    var margin = 10;
+    var imgWidth = pdfWidth - margin * 2;
     var imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-    var position = 10;
+    var yPos = margin;
     var heightLeft = imgHeight;
 
-    // 첫 페이지
-    pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
-    heightLeft -= (pdfHeight - 20);
+    pdf.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
+    heightLeft -= (pdfHeight - margin * 2);
 
-    // 추가 페이지
     while (heightLeft > 0) {
       pdf.addPage();
-      position = 10 - (imgHeight - heightLeft);
-      pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
-      heightLeft -= (pdfHeight - 20);
+      yPos = margin - (imgHeight - heightLeft);
+      pdf.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
+      heightLeft -= (pdfHeight - margin * 2);
     }
 
     pdf.save(filename);
