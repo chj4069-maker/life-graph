@@ -410,16 +410,44 @@ async function doSubmit() {
 
   var submission = { name: name, data: dataPoints.slice(), submittedAt: new Date().toISOString() };
 
-  // Firebase save
+  // Firebase save with retry (최대 3회 시도)
   var fbKey = null;
-  try {
-    var res = await fetch(FIREBASE_DB_URL + '/submissions.json', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(submission)
-    });
-    var d = await res.json();
-    fbKey = d.name;
-  } catch (e) { console.warn('Firebase:', e); }
+  for (var attempt = 1; attempt <= 3; attempt++) {
+    try {
+      var res = await fetch(FIREBASE_DB_URL + '/submissions.json', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submission)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var d = await res.json();
+      if (d && d.name) { fbKey = d.name; break; }
+      throw new Error('No key returned');
+    } catch (e) {
+      console.warn('Firebase attempt ' + attempt + ':', e);
+      if (attempt < 3) {
+        // 재시도 전 대기: 1초, 2초
+        await new Promise(function(r) { setTimeout(r, attempt * 1000); });
+      }
+    }
+  }
+
+  // 3번 다 실패한 경우 로컬 저장 후 한번 더 시도
+  if (!fbKey) {
+    try {
+      localStorage.setItem('lifegraph_backup_' + Date.now(), JSON.stringify(submission));
+    } catch(e) {}
+    // 5초 후 마지막 시도
+    setTimeout(async function() {
+      try {
+        var retryRes = await fetch(FIREBASE_DB_URL + '/submissions.json', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(submission)
+        });
+        var retryD = await retryRes.json();
+        if (retryD && retryD.name) console.log('Late save succeeded:', retryD.name);
+      } catch(e) { console.warn('Final retry failed:', e); }
+    }, 5000);
+  }
 
   // Show result
   showScreen('result');
@@ -551,7 +579,7 @@ async function downloadPDF(source) {
   }
 
   try {
-    var canvas = await html2canvas(container, {
+    var fullCanvas = await html2canvas(container, {
       scale: 3,
       useCORS: true,
       backgroundColor: '#FAF6F1',
@@ -560,28 +588,41 @@ async function downloadPDF(source) {
       height: container.scrollHeight,
     });
 
-    var imgData = canvas.toDataURL('image/png');
-
     var JsPDF = (window.jspdf && window.jspdf.jsPDF) || (window.jsPDF) || null;
     if (!JsPDF) throw new Error('PDF 라이브러리 로드 실패. 새로고침 후 다시 시도해주세요.');
 
     var pdf = new JsPDF('p', 'mm', 'a4');
     var pw = pdf.internal.pageSize.getWidth();
     var ph = pdf.internal.pageSize.getHeight();
-    var m = 8;
-    var iw = pw - m * 2;
-    var ih = (canvas.height * iw) / canvas.width;
-    var left = ih;
-    var y = m;
+    var margin = 8;
+    var contentW = pw - margin * 2;
+    var contentH = ph - margin * 2;
 
-    pdf.addImage(imgData, 'PNG', m, y, iw, ih);
-    left -= (ph - m * 2);
+    // 캔버스를 페이지 높이만큼 잘라서 각 페이지에 배치
+    var scaledImgW = contentW;
+    var scaledImgH = (fullCanvas.height * contentW) / fullCanvas.width;
+    var totalPages = Math.ceil(scaledImgH / contentH);
 
-    while (left > 0) {
-      pdf.addPage();
-      y = m - (ih - left);
-      pdf.addImage(imgData, 'PNG', m, y, iw, ih);
-      left -= (ph - m * 2);
+    // 각 페이지에 해당하는 캔버스 영역을 잘라서 삽입
+    var srcPageH = fullCanvas.height / totalPages;
+
+    for (var pg = 0; pg < totalPages; pg++) {
+      if (pg > 0) pdf.addPage();
+
+      // 원본 캔버스에서 이 페이지에 해당하는 영역 잘라내기
+      var sliceCanvas = document.createElement('canvas');
+      var srcY = pg * srcPageH;
+      var srcH = Math.min(srcPageH, fullCanvas.height - srcY);
+      sliceCanvas.width = fullCanvas.width;
+      sliceCanvas.height = srcH;
+
+      var sliceCtx = sliceCanvas.getContext('2d');
+      sliceCtx.drawImage(fullCanvas, 0, srcY, fullCanvas.width, srcH, 0, 0, fullCanvas.width, srcH);
+
+      var sliceImg = sliceCanvas.toDataURL('image/png');
+      var sliceH = (srcH * contentW) / fullCanvas.width;
+
+      pdf.addImage(sliceImg, 'PNG', margin, margin, contentW, sliceH);
     }
 
     pdf.save(filename);
